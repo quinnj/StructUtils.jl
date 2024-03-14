@@ -86,6 +86,8 @@ lower(::StructStyle, x) = lower(x)
 function lower(st::StructStyle, x, tags)
     if x isa Dates.TimeType && tags !== nothing && haskey(tags, :dateformat)
         return Dates.format(x, tags.dateformat)
+    elseif tags !== nothing && haskey(tags, :lower)
+        return tags.lower(x)
     else
         return lower(st, x)
     end
