@@ -2,7 +2,7 @@ module Structs
 
 using Dates, UUIDs
 
-export @noarg
+export @noarg, @defaults, @tags
 
 abstract type StructStyle end
 struct DefaultStyle <: StructStyle end
@@ -182,14 +182,14 @@ struct EarlyReturn{T}
     value::T
 end
 
-@inline applyeach(_, f, x) = applyeach(f, x)
+@inline applyeach(f, x) = applyeach(DefaultStyle(), f, x)
 
-@inline function applyeach(f, x::AbstractArray)
+@inline function applyeach(st::StructStyle, f, x::AbstractArray)
     for i in eachindex(x)
         ret = if @inbounds(isassigned(x, i))
-            f(i, @inbounds(x[i]))
+            f(i, lower(st, @inbounds(x[i])))
         else
-            f(i, nothing)
+            f(i, lower(st, nothing))
         end
         ret isa EarlyReturn && return ret
     end
@@ -197,9 +197,9 @@ end
 end
 
 # special-case Pair vectors to act like Dicts
-@inline function applyeach(f, x::AbstractVector{Pair{K, V}}) where {K, V}
+@inline function applyeach(st::StructStyle, f, x::AbstractVector{Pair{K, V}}) where {K, V}
     for (k, v) in x
-        ret = f(k, v)
+        ret = f(k, lower(st, v))
         ret isa EarlyReturn && return ret
     end
     return
@@ -207,39 +207,67 @@ end
 
 # appropriate definition for iterables that
 # can't have #undef values
-@inline function applyeach(f, x::Union{AbstractSet, Base.Generator, Core.SimpleVector})
+@inline function applyeach(st::StructStyle, f, x::Union{AbstractSet, Base.Generator, Core.SimpleVector})
     for (i, v) in enumerate(x)
-        ret = f(i, v)
+        ret = f(i, lower(st, v))
         ret isa EarlyReturn && return ret
     end
     return
 end
 
 # generic definition for Tuple, NamedTuple, structs
-@generated function applyeach(f, x::T) where {T}
-    N = fieldcount(T)
-    ex = quote
-        Base.@_inline_meta
-    end
-    for i = 1:N
-        #TODO: support fielddefaults/fielddefault
-        fname = Meta.quot(fieldname(T, i))
-        push!(ex.args, quote
-            ret = if isdefined(x, $i)
-                f($fname, getfield(x, $i))
-            else
-                f($fname, nothing)
+function applyeach(st::StructStyle, f, x::T) where {T}
+    if @generated
+        N = fieldcount(T)
+        ex = quote
+            Base.@_inline_meta
+            defs = fielddefaults(st, T)
+        end
+        for i = 1:N
+            fname = Meta.quot(fieldname(T, i))
+            push!(ex.args, quote
+                ftags = fieldtags(st, T, $fname)
+                if ftags === nothing || !haskey(ftags, :ignore) || !ftags.ignore
+                    fname = (ftags === nothing || !haskey(ftags, :name)) ? $fname : ftags.name
+                    ret = if isdefined(x, $i)
+                        f(fname, lower(st, getfield(x, $i), ftags))
+                    elseif haskey(defs, $fname)
+                        # this branch should be really rare because we should
+                        # have applied a field default in the struct constructor
+                        f(fname, lower(st, defs[$fname], ftags))
+                    else
+                        f(fname, lower(st, nothing, ftags))
+                    end
+                    ret isa EarlyReturn && return ret
+                end
+            end)
+        end
+        push!(ex.args, :(return))
+        return ex
+    else
+        defs = fielddefaults(st, T)
+        for i = 1:fieldcount(T)
+            fname = fieldname(T, i)
+            ftags = fieldtags(st, T, fname)
+            if ftags === nothing || !haskey(ftags, :ignore) || !ftags.ignore
+                fname = (ftags === nothing || !haskey(ftags, :name)) ? fname : ftags.name
+                ret = if isdefined(x, i)
+                    f(fname, lower(st, getfield(x, i), ftags))
+                elseif haskey(defs, fname)
+                    f(fname, lower(st, defs[fname], ftags))
+                else
+                    f(fname, lower(st, nothing, ftags))
+                end
+                ret isa EarlyReturn && return ret
             end
-            ret isa EarlyReturn && return ret
-        end)
+        end
+        return
     end
-    push!(ex.args, :(return))
-    return ex
 end
 
-@inline function applyeach(f, x::AbstractDict)
+@inline function applyeach(st::StructStyle, f, x::AbstractDict)
     for (k, v) in x
-        ret = f(k, v)
+        ret = f(k, lower(st, v))
         ret isa EarlyReturn && return ret
     end
     return

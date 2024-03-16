@@ -1,9 +1,19 @@
+#TODO:
+  # take from util.jl@kwdef to make more robust
+  # enforce trailing field defaults for :defaults/:tags kind
+  # take tests from base misc.jl
+  # validate that tags is namedtuple
+  # docs
+
+
 # take a struct or mutable struct definition Expr
 # and parse the type name (+ type parameters), potential subtyping
 # field definitions, including: name, type, default value, and field tags
 # if @noarg: generate noarg constructor applying field defaults + regular constructor
 # if @kwdef: generate outer kwdef constructor applying field defaults
-# if @defaults: no constructor generation
+# if @defaults: generate outer constructor applying trailing field defaults, also check
+  # for conforming trailing field defaults
+# if @tags: generate fieldtags override if defaults/tags are present
 # for all 3: generate fielddefaults and fieldtags overrides if defaults/tags are present
 # Returns: original struct defintion expr + any constructors + fielddefaults + fieldtags
 struct None end
@@ -36,6 +46,7 @@ end
 
 function FieldExpr(ex, isconst=false, isatomic=false)
     if ex isa Symbol
+        # name
         return FieldExpr(isconst, isatomic, ex, none, none, none)
     elseif ex.head == :(::)
         # name::type
@@ -112,7 +123,7 @@ function FieldExpr(ex, isconst=false, isatomic=false)
 end
 
 function parse_struct_def(kind, expr)
-    # kind is: :noarg, :kwdef, :tags
+    # kind is: :noarg, :kwdef, :defaults, :tags
     ret = Expr(:block)
     # we always want to return original struct definition expression
     push!(ret.args, expr)
