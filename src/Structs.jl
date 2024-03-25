@@ -377,8 +377,9 @@ function makestruct(f::F, style::S, ::Type{T}, source) where {F, S, T}
             nm = gensym(T <: Tuple ? :tuple : fieldname(T, i))
             push!(syms, nm)
             fname = Meta.quot(fieldname(T, i))
+            FT = fieldtype(T, i)
             push!(ex.args, quote
-                $nm = Ref{Union{Nothing, $(fieldtype(T, i))}}(fielddefault(style, $T, $fname))
+                $nm = Base.RefValue{Union{Nothing, $FT}}(fielddefault(style, $T, $fname))
             end)
         end
         if T <: Tuple
@@ -542,7 +543,9 @@ function _make(f::F, style::StructStyle, ::Type{T}, source, tags=nothing) where 
         st = applyeach(style, DictClosure(style, x), source)
         f(x)
     elseif arraylike(style, T)
-        if ndims(T) > 1
+        if T <: Tuple # special-case Tuple since it's arraylike, but we want to "make" it like a struct
+            st = makestruct(f, style, T, source)
+        elseif ndims(T) > 1
             # multidimensional arrays
             dims = discover_dims(source)
             x = initialize(style, T, dims)

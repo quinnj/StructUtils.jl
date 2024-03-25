@@ -48,12 +48,12 @@ function FieldExpr(ex, isconst=false, isatomic=false)
     if ex isa Symbol
         # name
         return FieldExpr(isconst, isatomic, ex, none, none, none)
-    elseif ex.head == :(::)
+    elseif isexpr(ex, :(::))
         # name::type
+        # Meta.unescape(ex.args[1])?
         return FieldExpr(isconst, isatomic, ex.args[1], ex.args[2], none, none)
-    elseif ex.head == :(=)
-        arg1 = ex.args[1]
-        arg2 = ex.args[2]
+    elseif isexpr(ex, :(=))
+        arg1, arg2 = ex.args
         if arg1 isa Symbol
             if arg2 isa Expr && arg2.head == :call && arg2.args[1] == :&
                 # name = default &tags
@@ -73,7 +73,7 @@ function FieldExpr(ex, isconst=false, isatomic=false)
         else
             throw(ArgumentError("unsupported field expression for Structs.jl macro: $ex"))
         end
-    elseif ex.head == :call
+    elseif isexpr(ex, :call)
         arg1 = ex.args[2]
         arg2 = ex.args[3]
         if arg1 isa Symbol
@@ -85,10 +85,10 @@ function FieldExpr(ex, isconst=false, isatomic=false)
         else
             throw(ArgumentError("unsupported field expression for Structs.jl macro: $ex"))
         end
-    elseif ex.head == :const
+    elseif isexpr(ex, :const)
         # const field_expr
         return FieldExpr(ex.args[1], true)
-    elseif ex.head == :macrocall && ex.args[1] == Symbol("@atomic")
+    elseif isexpr(ex, :atomic)
         # @atomic field_expr
         if length(ex.args) == 3
             return FieldExpr(ex.args[3], false, true)
@@ -123,22 +123,26 @@ function FieldExpr(ex, isconst=false, isatomic=false)
 end
 
 function parse_struct_def(kind, expr)
+    expr = macroexpand(__module__, expr)
+    isexpr(expr, :struct) || throw(ArgumentError("Invalid usage of @$kind macro"))
+    _, T, fieldsblock = expr.args
+    if T isa Expr && T.head === :<:
+        T = T.args[1]
+    end
     # kind is: :noarg, :kwdef, :defaults, :tags
     ret = Expr(:block)
     # we always want to return original struct definition expression
     push!(ret.args, expr)
     # parse field exprs
-    #TODO: probably need to not parse inner constructors
-    fields = [FieldExpr(ex) for ex in expr.args[3].args if !(ex isa LineNumberNode)]
+    fields = [FieldExpr(ex) for ex in fieldsblock if !(ex isa LineNumberNode)]
     # replace field exprs w/ cleaned up; i.e. defaults & tags removed
     expr.args[3].args = [_expr(f) for f in fields]
     if kind == :noarg
         # generate noarg constructor
-        nm = expr.args[2]
         cexpr = quote
-            function $nm()
+            function $T()
                 x = new()
-                # apply field defaults here
+                # we'll inject field defaults here
                 return x
             end
         end
@@ -149,56 +153,50 @@ function parse_struct_def(kind, expr)
         # add inner constructor right after field definitions
         push!(expr.args[3].args, cexpr)
         # override Structs.noarg(::Type{nm}) = true and add outside struct definition
-        push!(ret.args, :(Structs.noarg(::Type{$nm}) = true))
+        push!(ret.args, :(Structs.noarg(::Type{<:$T}) = true))
         # generate fieldtags override if applicable
         if any(f.tags !== none for f in fields)
             tags_nt = Expr(:tuple, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== Structs.none]...)
-            push!(ret.args, :(Structs.fieldtags(::Type{$nm}) = $tags_nt))
+            push!(ret.args, :(Structs.fieldtags(::Type{<:$T}) = $tags_nt))
         end
-        return esc(ret)
     elseif kind == :kwdef
         # generate outer kwdef constructor, like: Foo(; a=1, b=2, ...) = Foo(a, b, ...)
-        nm = expr.args[2]
         params = Expr(:parameters, (_kw(fex) for fex in fields)...)
         fexpr = quote
-            function $nm()
-                return $nm($((f.name for f in fields)...))
+            function $T()
+                return $T($((f.name for f in fields)...))
             end
         end
-        # dump(fexpr)
         push!(fexpr.args[2].args[1].args, params)
         push!(ret.args, fexpr)
-        # override Structs.kwdef(::Type{nm}) = true and add outside struct definition
-        push!(ret.args, :(Structs.kwdef(::Type{$nm}) = true))
+        # override Structs.kwdef(::Type{T}) = true and add outside struct definition
+        push!(ret.args, :(Structs.kwdef(::Type{<:$T}) = true))
         # generate fielddefaults override
         defs_nt = Expr(:tuple, Expr(:parameters, [:(($(f.name)=$(f.default))) for f in fields if f.default !== none]...))
-        push!(ret.args, :(Structs.fielddefaults(::Type{$nm}) = $defs_nt))
+        push!(ret.args, :(Structs.fielddefaults(::Type{<:$T}) = $defs_nt))
         # generate fieldtags override if applicable
         if any(f.tags !== none for f in fields)
-            tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== Structs.none]...))
-            push!(ret.args, :(Structs.fieldtags(::Type{$nm}) = $tags_nt))
+            tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== none]...))
+            push!(ret.args, :(Structs.fieldtags(::Type{<:$T}) = $tags_nt))
         end
-        return esc(ret)
     elseif kind == :defaults
-        nm = expr.args[2]
         # generate fielddefaults override
         defs_nt = Expr(:tuple, Expr(:parameters, [:(($(f.name)=$(f.default))) for f in fields if f.default !== none]...))
-        push!(ret.args, :(Structs.fielddefaults(::Type{$nm}) = $defs_nt))
+        push!(ret.args, :(Structs.fielddefaults(::Type{<:$T}) = $defs_nt))
         # generate fieldtags override if applicable
         if any(f.tags !== none for f in fields)
-            tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== Structs.none]...))
-            push!(ret.args, :(Structs.fieldtags(::Type{$nm}) = $tags_nt))
+            tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== none]...))
+            push!(ret.args, :(Structs.fieldtags(::Type{<:$T}) = $tags_nt))
         end
-        return esc(ret)
     elseif kind == :tags
         nm = expr.args[2]
         # generate fieldtags override
         tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== Structs.none]...))
-        push!(ret.args, :(Structs.fieldtags(::Type{$nm}) = $tags_nt))
-        return esc(ret)
+        push!(ret.args, :(Structs.fieldtags(::Type{<:$T}) = $tags_nt))
     else
         throw(ArgumentError("unsupported kind for Structs.jl macro: $kind"))
     end
+    return :(esc(:($Base.@__doc__ $ret)))
 end
 
 macro noarg(expr)
