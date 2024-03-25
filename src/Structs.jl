@@ -412,25 +412,26 @@ struct DictClosure{S, T}
     dict::T
 end
 
-struct DictKeyClosure{K}
-    key::K # Ref for keytype
+mutable struct DictKeyClosure{K}
+    key::K
+    DictKeyClosure{K}() where {K} = new{K}()
 end
 
-@inline (f::DictKeyClosure{K})(x) where {K} = setindex!(f.key, x)
+@inline (f::DictKeyClosure{K})(x) where {K} = setfield!(f, :key, x)
 
 struct DictValClosure{D, K}
     dict::D # Dict instance
-    key::K # Ref for keytype
+    key::DictKeyClosure{K}
 end
 
-@inline (f::DictValClosure{D, K})(x) where {D, K} = addkeyval!(f.dict, f.key[], x)
+@inline (f::DictValClosure{D, K})(x) where {D, K} = addkeyval!(f.dict, f.key.key, x)
 
 @inline function (f::DictClosure{S, T})(k, v) where {S, T}
     KT = _keytype(f.dict)
     VT = _valtype(f.dict)
-    key_ref = Ref{KT}()
-    make(DictKeyClosure(key_ref), f.style, KT, k)
-    return make(DictValClosure(f.dict, key_ref), f.style, VT, v)
+    kc = DictKeyClosure{KT}()
+    make(kc, f.style, KT, k)
+    return make(DictValClosure(f.dict, kc), f.style, VT, v)
 end
 
 struct ArrayClosure{S, T}
