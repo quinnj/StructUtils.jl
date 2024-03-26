@@ -161,7 +161,7 @@ println("Recurs")
 println("O")
 @test Structs.make(O, (id=0, name=missing)) == O(0, missing)
 @test Structs.make(O, (id=0, name=nothing)) == O(0, nothing)
-Structs.choosetype(::Type{O}, key, ::Type{T}, val) where {T} = key == :name ? (isnothing(val) ? Nothing : ismissing(val) ? Missing : haskey(val, :fruit) ? I : L) : T
+
 @test Structs.make(O, (id=0, name=(id=2, first_name="Jim", rate=3.14))) == O(0, L(2, "Jim", 3.14))
 @test Structs.make(O, (id=0, name=(id=2, name="Jane", fruit=banana))) == O(0, I(2, "Jane", banana))
 

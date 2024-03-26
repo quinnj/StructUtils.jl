@@ -99,7 +99,7 @@ lift(::Type{Symbol}, x) = Symbol(x)
 lift(::Type{T}, x) where {T} = Base.issingletontype(T) ? T() : convert(T, x)
 lift(::Type{>:Missing}, ::Nothing) = missing
 lift(::Type{>:Nothing}, ::Nothing) = nothing
-lift(::Type{>:Union{Missing, Nothing}}, ::Nothing) = missing
+lift(::Type{>:Union{Missing, Nothing}}, ::Nothing) = nothing
 lift(::Type{>:Union{Missing, Nothing}}, ::Missing) = missing
 lift(::Type{Char}, x::AbstractString) = length(x) == 1 ? x[1] : throw(ArgumentError("expected single character, got $x"))
 lift(::Type{UUID}, x::AbstractString) = UUID(x)
@@ -120,7 +120,16 @@ function lift(::Type{A}, x) where {A <: AbstractArray{T, 0}} where {T}
     return m
 end
 @inline lift(::Type{T}, x, _) where {T} = lift(T, x)
-@inline lift(::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? lift(T, x) : lift(T, x, tags)
+@inline lift(::StructStyle, ::Type{T}, x) where {T} = lift(T, x)
+
+@inline function lift(st::StructStyle, ::Type{T}, x, tags) where {T}
+    if tags !== nothing && haskey(tags, :lift)
+        return tags.lift(x)
+    else
+        return lift(st, T, x)
+    end
+end
+
 @inline lift(f::F, st::StructStyle, ::Type{T}, x, tags=nothing) where {F, T} = tags === nothing ? f(lift(st, T, x)) : f(lift(st, T, x, tags))
 
 function choosetype end
@@ -128,8 +137,15 @@ function choosetype end
 choosetype(::Type{T}, x) where {T} = (T >: Missing && !nulllike(x)) ? nonmissingtype(T) :
     (T >: Nothing && !nulllike(x)) ? Base.nonnothingtype(T) : T
 @inline choosetype(::Type{T}, x, tags) where {T} = choosetype(T, x)
+@inline choosetype(::StructStyle, ::Type{T}, x) where {T} = choosetype(T, x)
 
-@inline choosetype(::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? choosetype(T, x) : choosetype(T, x, tags)
+@inline function choosetype(st::StructStyle, ::Type{T}, x, tags) where {T}
+    if tags !== nothing && haskey(tags, :choosetype)
+        return tags.choosetype(x)
+    else
+        return choosetype(st, T, x)
+    end
+end
 @inline choosetype(f, style::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? f(style, choosetype(style, T, x), x, nothing) : f(style, choosetype(style, T, x, tags), x, tags)
 
 """
