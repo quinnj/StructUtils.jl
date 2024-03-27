@@ -125,6 +125,8 @@ end
 @inline function lift(st::StructStyle, ::Type{T}, x, tags) where {T}
     if tags !== nothing && haskey(tags, :lift)
         return tags.lift(x)
+    elseif tags !== nothing
+        return lift(T, x, tags)
     else
         return lift(st, T, x)
     end
