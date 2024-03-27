@@ -120,7 +120,18 @@ function lift(::Type{A}, x) where {A <: AbstractArray{T, 0}} where {T}
     return m
 end
 @inline lift(::Type{T}, x, _) where {T} = lift(T, x)
-@inline lift(::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? lift(T, x) : lift(T, x, tags)
+@inline lift(::StructStyle, ::Type{T}, x) where {T} = lift(T, x)
+
+@inline function lift(st::StructStyle, ::Type{T}, x, tags) where {T}
+    if tags !== nothing && haskey(tags, :lift)
+        return tags.lift(x)
+    elseif tags !== nothing
+        return lift(T, x, tags)
+    else
+        return lift(st, T, x)
+    end
+end
+
 @inline lift(f::F, st::StructStyle, ::Type{T}, x, tags=nothing) where {F, T} = tags === nothing ? f(lift(st, T, x)) : f(lift(st, T, x, tags))
 
 function choosetype end
