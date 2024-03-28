@@ -137,7 +137,7 @@ println("E")
 @test Structs.make(E, Dict("id" => 1, "a" => (a=1, b=2, c=3, d=4))) == E(1, A(1, 2, 3, 4))
 
 println("G")
-@test Structs.make(G, (id=1, rate=3.14, name="Jim", f=(id=2, rate=6.28, name="Bob"))) == G(1, 3.14, "Jim", F(2, 6.28, "Bob"))
+@test Structs.make(G, Dict("id" => 1, "rate" => 3.14, "name" => "Jim", "f" => Dict("id" => 2, "rate" => 6.28, "name" => "Bob"))) == G(1, 3.14, "Jim", F(2, 6.28, "Bob"))
 
 println("H")
 x = Structs.make(H, (id=0, name="", properties=Dict("a" => 1), addresses=["a", "b", "c"]))
@@ -161,7 +161,6 @@ println("Recurs")
 println("O")
 @test Structs.make(O, (id=0, name=missing)) == O(0, missing)
 @test Structs.make(O, (id=0, name=nothing)) == O(0, nothing)
-Structs.choosetype(::Type{O}, key, ::Type{T}, val) where {T} = key == :name ? (isnothing(val) ? Nothing : ismissing(val) ? Missing : haskey(val, :fruit) ? I : L) : T
 @test Structs.make(O, (id=0, name=(id=2, first_name="Jim", rate=3.14))) == O(0, L(2, "Jim", 3.14))
 @test Structs.make(O, (id=0, name=(id=2, name="Jane", fruit=banana))) == O(0, I(2, "Jane", banana))
 

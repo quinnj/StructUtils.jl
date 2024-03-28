@@ -48,11 +48,11 @@ function FieldExpr(ex, isconst=false, isatomic=false)
     if ex isa Symbol
         # name
         return FieldExpr(isconst, isatomic, ex, none, none, none)
-    elseif isexpr(ex, :(::))
+    elseif Meta.isexpr(ex, :(::))
         # name::type
         # Meta.unescape(ex.args[1])?
         return FieldExpr(isconst, isatomic, ex.args[1], ex.args[2], none, none)
-    elseif isexpr(ex, :(=))
+    elseif Meta.isexpr(ex, :(=))
         arg1, arg2 = ex.args
         if arg1 isa Symbol
             if arg2 isa Expr && arg2.head == :call && arg2.args[1] == :&
@@ -73,7 +73,7 @@ function FieldExpr(ex, isconst=false, isatomic=false)
         else
             throw(ArgumentError("unsupported field expression for Structs.jl macro: $ex"))
         end
-    elseif isexpr(ex, :call)
+    elseif Meta.isexpr(ex, :call)
         arg1 = ex.args[2]
         arg2 = ex.args[3]
         if arg1 isa Symbol
@@ -85,10 +85,10 @@ function FieldExpr(ex, isconst=false, isatomic=false)
         else
             throw(ArgumentError("unsupported field expression for Structs.jl macro: $ex"))
         end
-    elseif isexpr(ex, :const)
+    elseif Meta.isexpr(ex, :const)
         # const field_expr
         return FieldExpr(ex.args[1], true)
-    elseif isexpr(ex, :atomic)
+    elseif Meta.isexpr(ex, :atomic)
         # @atomic field_expr
         if length(ex.args) == 3
             return FieldExpr(ex.args[3], false, true)
@@ -122,9 +122,9 @@ function FieldExpr(ex, isconst=false, isatomic=false)
     end
 end
 
-function parse_struct_def(kind, expr)
-    expr = macroexpand(__module__, expr)
-    isexpr(expr, :struct) || throw(ArgumentError("Invalid usage of @$kind macro"))
+function parse_struct_def(kind, mod, expr)
+    expr = macroexpand(mod, expr)
+    Meta.isexpr(expr, :struct) || throw(ArgumentError("Invalid usage of @$kind macro"))
     _, T, fieldsblock = expr.args
     if T isa Expr && T.head === :<:
         T = T.args[1]
@@ -134,7 +134,7 @@ function parse_struct_def(kind, expr)
     # we always want to return original struct definition expression
     push!(ret.args, expr)
     # parse field exprs
-    fields = [FieldExpr(ex) for ex in fieldsblock if !(ex isa LineNumberNode)]
+    fields = [FieldExpr(ex) for ex in fieldsblock.args if !(ex isa LineNumberNode)]
     # replace field exprs w/ cleaned up; i.e. defaults & tags removed
     expr.args[3].args = [_expr(f) for f in fields]
     if kind == :noarg
@@ -196,21 +196,21 @@ function parse_struct_def(kind, expr)
     else
         throw(ArgumentError("unsupported kind for Structs.jl macro: $kind"))
     end
-    return :(esc(:($Base.@__doc__ $ret)))
+    return esc(:($Base.@__doc__ $ret))
 end
 
 macro noarg(expr)
-    parse_struct_def(:noarg, expr)
+    parse_struct_def(:noarg, __module__, expr)
 end
 
 macro kwdef(expr)
-    parse_struct_def(:kwdef, expr)
+    parse_struct_def(:kwdef, __module__, expr)
 end
 
 macro defaults(expr)
-    parse_struct_def(:defaults, expr)
+    parse_struct_def(:defaults, __module__, expr)
 end
 
 macro tags(expr)
-    parse_struct_def(:tags, expr)
+    parse_struct_def(:tags, __module__, expr)
 end

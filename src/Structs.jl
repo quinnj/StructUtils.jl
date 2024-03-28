@@ -99,7 +99,7 @@ lift(::Type{Symbol}, x) = Symbol(x)
 lift(::Type{T}, x) where {T} = Base.issingletontype(T) ? T() : convert(T, x)
 lift(::Type{>:Missing}, ::Nothing) = missing
 lift(::Type{>:Nothing}, ::Nothing) = nothing
-lift(::Type{>:Union{Missing, Nothing}}, ::Nothing) = missing
+lift(::Type{>:Union{Missing, Nothing}}, ::Nothing) = nothing
 lift(::Type{>:Union{Missing, Nothing}}, ::Missing) = missing
 lift(::Type{Char}, x::AbstractString) = length(x) == 1 ? x[1] : throw(ArgumentError("expected single character, got $x"))
 lift(::Type{UUID}, x::AbstractString) = UUID(x)
@@ -139,8 +139,18 @@ function choosetype end
 choosetype(::Type{T}, x) where {T} = (T >: Missing && !nulllike(x)) ? nonmissingtype(T) :
     (T >: Nothing && !nulllike(x)) ? Base.nonnothingtype(T) : T
 @inline choosetype(::Type{T}, x, tags) where {T} = choosetype(T, x)
+@inline choosetype(::StructStyle, ::Type{T}, x) where {T} = choosetype(T, x)
 
-@inline choosetype(::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? choosetype(T, x) : choosetype(T, x, tags)
+@inline function choosetype(st::StructStyle, ::Type{T}, x, tags) where {T}
+    if tags === nothing
+        return choosetype(st, T, x)
+    elseif haskey(tags, :choosetype)
+        return tags.choosetype(x)
+    else
+        return choosetype(T, x, tags)
+    end
+end
+
 @inline choosetype(f, style::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? f(style, choosetype(style, T, x), x, nothing) : f(style, choosetype(style, T, x, tags), x, tags)
 
 """
@@ -290,20 +300,23 @@ struct KeyValStructClosure{T, S, V}
     i::Union{Base.RefValue{Int}, Nothing}
 end
 
-@inline KeyValStructClosure{T}(style::S, val::V) where {T, S, V} = KeyValStructClosure{T, S, V}(style, val, T <: Tuple ? Ref(0) : nothing)
+KeyValStructClosure{T}(style::S, val::V) where {T, S, V} = KeyValStructClosure{T, S, V}(style, val, T <: Tuple ? Ref(0) : nothing)
 
 struct NoArgFieldRef{T}
     val::T
     i::Int
 end
 
-@inline (f::NoArgFieldRef{T})(val::S) where {T, S} = setfield!(f.val, f.i, val)
+(f::NoArgFieldRef{T})(val::S) where {T, S} = setfield!(f.val, f.i, val)
 
-struct FieldRef{T}
-    val::T # Ref{T}
+mutable struct FieldRef{T}
+    val::T
+    FieldRef{T}() where {T} = new{T}()
+    FieldRef{T}(x) where {T} = new{T}(x)
 end
 
-@inline (f::FieldRef{T})(val::S) where {T, S} = setindex!(f.val, val)
+(f::FieldRef{T})(val) where {T} = setfield!(f, :val, val)
+Base.getindex(f::FieldRef) = f.val
 
 keyeq(a, b::String) = string(a) == b
 keyeq(a::AbstractString, b::String) = String(a) == b
@@ -324,7 +337,7 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
             if T <: Tuple
                 push!(ex.args, quote
                     if f.i[] == $i
-                        return make(FieldRef(f.val[$i]), f.style, $ftype, val)
+                        return make(f.val[$i], f.style, $ftype, val)
                     end
                 end)
             else
@@ -334,7 +347,7 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                     if noarg(f.style, T)
                         return make(NoArgFieldRef(f.val, $i), f.style, $ftype, val, ftags)
                     else
-                        return make(FieldRef(f.val[$i]), f.style, $ftype, val, ftags)
+                        return make(f.val[$i], f.style, $ftype, val, ftags)
                     end
                 end
                 if K == Int
@@ -364,16 +377,60 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
         # Core.println(ex)
         return ex
     else
-        error("bad generated function")
+        if T <: Tuple
+            i = f.i[] += 1
+            if i <= fieldcount(T)
+                return make(f.val[i], f.style, fieldtype(T, i), val)
+            end
+        else
+            tags = fieldtags(f.style, T)
+            for i = 1:fieldcount(T)
+                ftype = fieldtype(T, i)
+                if K == Int
+                    if key == i
+                        fname = fieldname(T, key)
+                        ftags = haskey(tags, fname) ? tags[fname] : nothing
+                        if noarg(f.style, T)
+                            return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
+                        else
+                            return make(f.val[i], f.style, ftype, val, ftags)
+                        end
+                    end
+                elseif K == Symbol
+                    fname = fieldname(T, i)
+                    fname = haskey(tags, fname) && haskey(tags[fname], :name) ? tags[fname].name : fname
+                    if key == fname
+                        ftags = haskey(tags, fname) ? tags[fname] : nothing
+                        if noarg(f.style, T)
+                            return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
+                        else
+                            return make(f.val[i], f.style, ftype, val, ftags)
+                        end
+                    end
+                else # K == String
+                    fname = fieldname(T, i)
+                    fstr = String(fname)
+                    fstr = haskey(tags, fname) && haskey(tags[fname], :name) ? String(tags[fname].name) : fstr
+                    if keyeq(key, fstr)
+                        ftags = haskey(tags, fname) ? tags[fname] : nothing
+                        if noarg(f.style, T)
+                            return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
+                        else
+                            return make(f.val[i], f.style, ftype, val, ftags)
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 
-function getfielddefault(style::S, ::Type{T}, key::Symbol) where {S, T}
+function getfielddefault(style::S, ::Type{T}, key) where {S, T}
     fd = fielddefault(style, T, key)
     if fd !== nothing
-        return Ref(fd)
+        return FieldRef{fieldtype(T, key)}(fd)
     else
-        return Ref{Union{Nothing, fieldtype(T, key)}}(nothing)
+        return FieldRef{fieldtype(T, key)}()
     end
 end
 
@@ -390,7 +447,8 @@ function makestruct(f::F, style::S, ::Type{T}, source) where {F, S, T}
             fname = Meta.quot(fieldname(T, i))
             FT = fieldtype(T, i)
             push!(ex.args, quote
-                $nm = Base.RefValue{Union{Nothing, $FT}}(fielddefault(style, $T, $fname))
+                fd = fielddefault(style, $T, $fname)
+                $nm = fd === nothing ? FieldRef{$FT}() : FieldRef{$FT}(fd)
             end)
         end
         if T <: Tuple
@@ -412,6 +470,8 @@ function makestruct(f::F, style::S, ::Type{T}, source) where {F, S, T}
         st = applyeach(style, KeyValStructClosure{T}(style, vals), source)
         if T <: Tuple
             f(ntuple(i -> vals[i][], fieldcount(T)))
+        elseif T <: NamedTuple
+            f(T(Tuple(vals[i][] for i = 1:fieldcount(T))))
         else
             f(T((vals[i][] for i = 1:fieldcount(T))...))
         end

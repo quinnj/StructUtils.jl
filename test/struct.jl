@@ -210,9 +210,9 @@ struct N
     uuid::UUID
 end
 
-struct O
+@tags struct O
     id::Int
-    name::Union{I,L,Missing,Nothing}
+    name::Union{I,L,Missing,Nothing} &(choosetype=x->isnothing(x) ? Nothing : ismissing(x) ? Missing : haskey(x, :fruit) ? I : L,)
 end
 
 # @testset "JSONBase.materialize" begin
