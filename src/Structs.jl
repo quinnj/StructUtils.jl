@@ -307,7 +307,7 @@ struct NoArgFieldRef{T}
     i::Int
 end
 
-(f::NoArgFieldRef{T})(val::S) where {T, S} = setfield!(f.val, f.i, val)
+(f::NoArgFieldRef{T})(val::S) where {T, S} = setfield!(f.val, f.i, val, Base.isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
 
 mutable struct FieldRef{T}
     val::T

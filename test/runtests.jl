@@ -2,6 +2,7 @@ using Test, Dates, UUIDs, Structs
 
 struct TestStyle <: Structs.StructStyle end
 
+include(joinpath(dirname(pathof(Structs)), "../test/macros.jl"))
 include(joinpath(dirname(pathof(Structs)), "../test/struct.jl"))
 
 @testset "Structs" begin
@@ -164,38 +165,8 @@ println("O")
 @test Structs.make(O, (id=0, name=(id=2, first_name="Jim", rate=3.14))) == O(0, L(2, "Jim", 3.14))
 @test Structs.make(O, (id=0, name=(id=2, name="Jane", fruit=banana))) == O(0, I(2, "Jane", banana))
 
-@testset "macros" begin
-
-
-
-
-    ex = :(mutable struct Foo
-        no_type
-        with_type::Int
-        with_default = 1
-        with_type_default::Int = 1
-        with_tag &(xml=(key="with-tag",),)
-        with_tag_type::Int &(xml=(key="with-tag-type",),)
-        with_tag_default = 1 &(xml=(key="with-tag-default",),)
-        with_tag_type_default::Int = 1 &(xml=(key="with-tag-default",),)
-        @atomic no_type_atomic
-        @atomic with_type_atomic::Int
-        @atomic with_default_atomic = 1
-        @atomic with_type_default_atomic::Int = 1
-        @atomic with_tag_atomic &(xml=(key="with-tag-atomic",),)
-        @atomic with_tag_type_atomic::Int &(xml=(key="with-tag-type-atomic",),)
-        @atomic with_tag_default_atomic = 1 &(xml=(key="with-tag-default-atomic",),)
-        @atomic with_tag_type_default_atomic::Int = 1 &(xml=(key="with-tag-default-atomic",),)
-        const no_type_const
-        const with_type_const::Int
-        const with_default_const = 1
-        const with_type_default_const::Int = 1
-        const with_tag_const &(xml=(key="with-tag-const",),)
-        const with_tag_type_const::Int &(xml=(key="with-tag-type-const",),)
-        const with_tag_default_const = 1 &(xml=(key="with-tag-default-const",),)
-        const with_tag_type_default_const::Int = 1 &(xml=(key="with-tag-default-const",),)
-    end)
-
-end # @testset "macros"
+println("P")
+p = Structs.make(P, (id=0, name="Jane"))
+@test p.id == 0 && p.name == "Jane"
 
 end
