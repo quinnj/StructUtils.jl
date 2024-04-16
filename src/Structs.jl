@@ -22,10 +22,21 @@ kwdef(_) = false
 kwdef(_, ::Type{T}) where {T} = kwdef(T)
 kwdef(st, ::T) where {T} = kwdef(st, T)
 
+fieldtagkey(::Type{T}) where {T} = nothing
+
 fieldtags(::Type{T}) where {T} = (;)
 fieldtags(_, ::Type{T}) where {T} = fieldtags(T)
-fieldtags(::Type{T}, key) where {T} = haskey(fieldtags(T), key) ? fieldtags(T)[key] : nothing
-fieldtags(st, ::Type{T}, key) where {T} = haskey(fieldtags(st, T), key) ? fieldtags(st, T)[key] : nothing
+fieldtags(::Type{T}, key) where {T} = get(() -> (;), fieldtags(T), key)
+
+@inline function fieldtags(st::StructStyle, ::Type{T}, key) where {T}
+    ft = fieldtags(st, T)
+    fft = get(() -> (;), ft, key)
+    isempty(fft) && return fft
+    ftk = fieldtagkey(typeof(st))
+    ftk === nothing && return fft
+    return get(() -> (;), fft, ftk)
+end
+
 fielddefaults(::Type{T}) where {T} = (;)
 fielddefaults(_, ::Type{T}) where {T} = fielddefaults(T)
 fielddefault(::Type{T}, key) where {T} = haskey(fielddefaults(T), key) ? fielddefaults(T)[key] : nothing
@@ -84,9 +95,9 @@ lower(x) = x
 lower(::StructStyle, x) = lower(x)
 
 function lower(st::StructStyle, x, tags)
-    if x isa Dates.TimeType && tags !== nothing && haskey(tags, :dateformat)
+    if x isa Dates.TimeType && haskey(tags, :dateformat)
         return Dates.format(x, tags.dateformat)
-    elseif tags !== nothing && haskey(tags, :lower)
+    elseif haskey(tags, :lower)
         return tags.lower(x)
     else
         return lower(st, x)
@@ -107,7 +118,7 @@ lift(::Type{VersionNumber}, x::AbstractString) = VersionNumber(x)
 lift(::Type{Regex}, x::AbstractString) = Regex(x)
 lift(::Type{T}, x::AbstractString) where {T <: Dates.TimeType} = T(x)
 function lift(::Type{T}, x, tags) where {T <: Dates.TimeType}
-    if tags !== nothing && haskey(tags, :dateformat)
+    if haskey(tags, :dateformat)
         return T(x, tags.dateformat)
     else
         return T(x)
@@ -123,16 +134,16 @@ end
 @inline lift(::StructStyle, ::Type{T}, x) where {T} = lift(T, x)
 
 @inline function lift(st::StructStyle, ::Type{T}, x, tags) where {T}
-    if tags !== nothing && haskey(tags, :lift)
+    if haskey(tags, :lift)
         return tags.lift(x)
-    elseif tags !== nothing
+    elseif !isempty(tags)
         return lift(T, x, tags)
     else
         return lift(st, T, x)
     end
 end
 
-@inline lift(f::F, st::StructStyle, ::Type{T}, x, tags=nothing) where {F, T} = tags === nothing ? f(lift(st, T, x)) : f(lift(st, T, x, tags))
+@inline lift(f::F, st::StructStyle, ::Type{T}, x, tags) where {F, T} = f(lift(st, T, x, tags))
 
 function choosetype end
 
@@ -142,16 +153,16 @@ choosetype(::Type{T}, x) where {T} = (T >: Missing && !nulllike(x)) ? nonmissing
 @inline choosetype(::StructStyle, ::Type{T}, x) where {T} = choosetype(T, x)
 
 @inline function choosetype(st::StructStyle, ::Type{T}, x, tags) where {T}
-    if tags === nothing
-        return choosetype(st, T, x)
-    elseif haskey(tags, :choosetype)
+    if haskey(tags, :choosetype)
         return tags.choosetype(x)
-    else
+    elseif !isempty(tags)
         return choosetype(T, x, tags)
+    else
+        return choosetype(st, T, x)
     end
 end
 
-@inline choosetype(f, style::StructStyle, ::Type{T}, x, tags=nothing) where {T} = tags === nothing ? f(style, choosetype(style, T, x), x, nothing) : f(style, choosetype(style, T, x, tags), x, tags)
+@inline choosetype(f, style::StructStyle, ::Type{T}, x, tags) where {T} = f(style, choosetype(style, T, x, tags), x, tags)
 
 """
     Structs.applyeach(f, x) -> Union{Structs.EarlyReturn, Nothing}
@@ -248,8 +259,8 @@ function applyeach(st::StructStyle, f, x::T) where {T}
             fname = Meta.quot(fieldname(T, i))
             push!(ex.args, quote
                 ftags = fieldtags(st, T, $fname)
-                if ftags === nothing || !haskey(ftags, :ignore) || !ftags.ignore
-                    fname = (ftags === nothing || !haskey(ftags, :name)) ? $fname : ftags.name
+                if !haskey(ftags, :ignore) || !ftags.ignore
+                    fname = get(ftags, :name, $fname)
                     ret = if isdefined(x, $i)
                         f(fname, lower(st, getfield(x, $i), ftags))
                     elseif haskey(defs, $fname)
@@ -270,8 +281,8 @@ function applyeach(st::StructStyle, f, x::T) where {T}
         for i = 1:fieldcount(T)
             fname = fieldname(T, i)
             ftags = fieldtags(st, T, fname)
-            if ftags === nothing || !haskey(ftags, :ignore) || !ftags.ignore
-                fname = (ftags === nothing || !haskey(ftags, :name)) ? fname : ftags.name
+            if !haskey(ftags, :ignore) || !ftags.ignore
+                fname = get(ftags, :name, fname)
                 ret = if isdefined(x, i)
                     f(fname, lower(st, getfield(x, i), ftags))
                 elseif haskey(defs, fname)
@@ -328,8 +339,6 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
             Base.@_inline_meta
             if T <: Tuple
                 f.i[] += 1
-            else
-                tags = fieldtags(f.style, T)
             end
         end
         for i = 1:N
@@ -343,7 +352,6 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
             else
                 fname = Meta.quot(fieldname(T, i))
                 mexpr = quote
-                    ftags = haskey(tags, $fname) ? tags[$fname] : nothing
                     if noarg(f.style, T)
                         return make(NoArgFieldRef(f.val, $i), f.style, $ftype, val, ftags)
                     else
@@ -353,12 +361,14 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                 if K == Int
                     push!(ex.args, quote
                         if key == $i
+                            ftags = fieldtags(f.style, T, $fname)
                             $mexpr
                         end
                     end)
                 elseif K == Symbol
                     push!(ex.args, quote
-                        fname = haskey(tags, $fname) && haskey(tags[$fname], :name) ? tags[$fname].name : $fname
+                        ftags = fieldtags(f.style, T, $fname)
+                        fname = get(ftags, :name, $fname)
                         if key == fname
                             $mexpr
                         end
@@ -366,7 +376,8 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                 else
                     fstr = String(fieldname(T, i))
                     push!(ex.args, quote
-                        fstr = haskey(tags, $fname) && haskey(tags[$fname], :name) ? String(tags[$fname].name) : $fstr
+                        ftags = fieldtags(f.style, T, $fname)
+                        fstr = String(get(ftags, :name, $fstr))
                         if keyeq(key, fstr)
                             $mexpr
                         end
@@ -383,13 +394,12 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                 return make(f.val[i], f.style, fieldtype(T, i), val)
             end
         else
-            tags = fieldtags(f.style, T)
             for i = 1:fieldcount(T)
                 ftype = fieldtype(T, i)
                 if K == Int
                     if key == i
                         fname = fieldname(T, key)
-                        ftags = haskey(tags, fname) ? tags[fname] : nothing
+                        ftags = fieldtags(f.style, T, fname)
                         if noarg(f.style, T)
                             return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
                         else
@@ -398,9 +408,9 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                     end
                 elseif K == Symbol
                     fname = fieldname(T, i)
-                    fname = haskey(tags, fname) && haskey(tags[fname], :name) ? tags[fname].name : fname
+                    ftags = fieldtags(f.style, T, fname)
+                    fname = get(ftags, :name, fname)
                     if key == fname
-                        ftags = haskey(tags, fname) ? tags[fname] : nothing
                         if noarg(f.style, T)
                             return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
                         else
@@ -409,10 +419,10 @@ function (f::KeyValStructClosure{T, S, V})(key::K, val::VV) where {T, S, V, K, V
                     end
                 else # K == String
                     fname = fieldname(T, i)
+                    ftags = fieldtags(f.style, T, fname)
                     fstr = String(fname)
-                    fstr = haskey(tags, fname) && haskey(tags[fname], :name) ? String(tags[fname].name) : fstr
+                    fstr = String(get(ftags, :name, fstr))
                     if keyeq(key, fstr)
-                        ftags = haskey(tags, fname) ? tags[fname] : nothing
                         if noarg(f.style, T)
                             return make(NoArgFieldRef(f.val, i), f.style, ftype, val, ftags)
                         else
@@ -580,7 +590,7 @@ end
 @inline (f::MultiDimValFunc{S, A})(x) where {S, A} = setindex!(f.arr, x, f.dims...)
 
 # programmatically construct T using noarg/kwdef/struct strategies and applyeach
-make(::Type{T}, source; style::StructStyle=DefaultStyle(), tags=nothing) where {T} = make(style, T, source, tags)
+make(::Type{T}, source; style::StructStyle=DefaultStyle()) where {T} = make(style, T, source)
 
 mutable struct ValueClosure{T}
     x::T
@@ -595,20 +605,20 @@ end
 
 @inline (f::MakeClosure)(style::S, ::Type{T}, source::V, tags) where {S, T, V} = _make(f.f, style, T, source, tags)
 
-@inline function make(style::StructStyle, ::Type{T}, source, tags=nothing) where {T}
+@inline function make(style::StructStyle, ::Type{T}, source, tags=(;)) where {T}
     vc = ValueClosure{T}()
     choosetype(MakeClosure(vc), style, T, source, tags)
     return vc.x
 end
 
-@inline function make(f::F, style::StructStyle, ::Type{T}, source, tags=nothing) where {F, T}
+@inline function make(f::F, style::StructStyle, ::Type{T}, source, tags=(;)) where {F, T}
     return choosetype(MakeClosure(f), style, T, source, tags)
 end
 
 # assume choosetype has been applied to T
 # f is function to be applied to made value
 # returns state from applyeach if any
-function _make(f::F, style::StructStyle, ::Type{T}, source, tags=nothing) where {F, T}
+function _make(f::F, style::StructStyle, ::Type{T}, source, tags=(;)) where {F, T}
     if dictlike(style, T)
         x = initialize(style, T)
         st = applyeach(style, DictClosure(style, x), source)
@@ -659,8 +669,5 @@ function make!(style::StructStyle, x::T, source) where {T}
 end
 
 make!(style::StructStyle, ::Type{T}, source) where {T} = make!(style, initialize(style, T), source)
-
-#TODO:
- # documentation: manual + docstrings
 
 end

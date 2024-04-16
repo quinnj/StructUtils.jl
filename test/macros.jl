@@ -178,6 +178,18 @@ module KwdefWithEsc_TestModule
     KwdefWithEsc.@define_struct()
 end
 
+@defaults struct Defaults1
+    a::Int
+    b::String
+    c::Float64 = 3.14
+    d::Int = 42
+end
+
+@defaults struct Defaults2{S <: IO, T} <: AbstractNoArg
+    io::S
+    a::T = 10 * 20
+end
+
 @testset "macros" begin
 
     @test NoArg() isa NoArg
@@ -262,5 +274,14 @@ end
     end
 
     @test isdefined(KwdefWithEsc_TestModule, :Struct)
+
+    @test Defaults1(1, "hey") == Defaults1(1, "hey", 3.14, 42)
+    io = IOBuffer()
+    @test Defaults2(io) == Defaults2(io, 200)
+
+    @test_throws ArgumentError @macroexpand @defaults struct FooFoo
+        a::Int = 1
+        b::String
+    end
 
 end # @testset "macros"
