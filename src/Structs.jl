@@ -215,6 +215,7 @@ struct EarlyReturn{T}
 end
 
 @inline applyeach(f, x) = applyeach(DefaultStyle(), f, x)
+@inline applyeach(f, st::StructStyle, x) = applyeach(st, f, x)
 
 @inline function applyeach(st::StructStyle, f, x::AbstractArray)
     for i in eachindex(x)
