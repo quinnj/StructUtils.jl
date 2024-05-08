@@ -23,7 +23,7 @@ The `@defaults` macro can be used to define default values for fields in any kin
 
 The `@tags` macro can be used to define tags for fields in any kind of struct.
 
-The `@kwdef` macro mirros the functionality of the Base defintion, while also allowing for the inclusion of field tags.
+The `@kwdef` macro mirrors the functionality of the Base defintion, while also allowing for the inclusion of field tags.
 
 The other major interface Structs.jl provides is the `Structs.make(T, source)` function. It allows programmatic construction of a type `T` from a variety of source objects.
 For example, I could have a custom struct `Foo` and be able to construct an instance from an array of values, a dictionary, a database cursor, a JSON object, etc. This is done by allowing source objects to implement interfaces for how fields should be provided programmatically (the primary means being the `Structs.applyeach` function), while `Structs.make` uses the programmatic knowledge from the above-mentioned macros, along with potential field tags, to construct the object.
