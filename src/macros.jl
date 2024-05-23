@@ -162,8 +162,8 @@ function parse_struct_def(kind, src, mod, expr)
         push!(expr.args[3].args, cexpr)
         #TODO: should we also generate an all-arg constructor like default struct constructors
         # that call convert to the field type for each field?
-        # override Structs.noarg(::Type{nm}) = true and add outside struct definition
-        push!(ret.args, :(Structs.noarg(::Type{<:$T}) = true))
+        # override StructUtils.noarg(::Type{nm}) = true and add outside struct definition
+        push!(ret.args, :(StructUtils.noarg(::Type{<:$T}) = true))
         generate_field_defaults_and_tags!(ret, T, fields)
     elseif kind == :kwdef
         if !isempty(fields)
@@ -179,8 +179,8 @@ function parse_struct_def(kind, src, mod, expr)
                 push!(ret.args, fexpr)
             end
         end
-        # override Structs.kwdef(::Type{T}) = true and add outside struct definition
-        push!(ret.args, :(Structs.kwdef(::Type{<:$T}) = true))
+        # override StructUtils.kwdef(::Type{T}) = true and add outside struct definition
+        push!(ret.args, :(StructUtils.kwdef(::Type{<:$T}) = true))
         generate_field_defaults_and_tags!(ret, T, fields)
     else
         # if any default are specified, ensure all trailing fields have defaults
@@ -207,12 +207,12 @@ function generate_field_defaults_and_tags!(ret, T, fields)
     # generate fielddefaults override if applicable
     if any(f.default !== none for f in fields)
         defs_nt = Expr(:tuple, Expr(:parameters, [:(($(f.name)=$(f.default))) for f in fields if f.default !== none]...))
-        push!(ret.args, :(Structs.fielddefaults(::Type{<:$T}) = $defs_nt))
+        push!(ret.args, :(StructUtils.fielddefaults(::Type{<:$T}) = $defs_nt))
     end
     # generate fieldtags override if applicable
     if any(f.tags !== none for f in fields)
         tags_nt = Expr(:tuple, Expr(:parameters, [:($(f.name)=$(f.tags)) for f in fields if f.tags !== none]...))
-        push!(ret.args, :(Structs.fieldtags(::Type{<:$T}) = $tags_nt))
+        push!(ret.args, :(StructUtils.fieldtags(::Type{<:$T}) = $tags_nt))
     end
 end
 
@@ -220,15 +220,15 @@ const SHARED_MACRO_DOCS = """
 The `@noarg`, `@kwdef`, `@defaults`, and `@tags` macros all support
 specifying "field tags" for each field in a struct. Field tags are
 a NamedTuple prefixed by `&` and are a way to attach metadata to a field. The
-field tags are accessible via the `Structs.fieldtags` function, and certain
-field tags are used by the `Structs.make` function to control how fields are
+field tags are accessible via the `StructUtils.fieldtags` function, and certain
+field tags are used by the `StructUtils.make` function to control how fields are
 constructed, including:
   * `dateformat`: a `DateFormat` object to use when parsing or formatting a `Dates.TimeType` field
   * `lower`: a function to apply to a field when `applyeach` is called on a struct
-  * `lift`: a function to apply to a field when `Structs.make` is called on for a struct
+  * `lift`: a function to apply to a field when `StructUtils.make` is called on for a struct
   * `ignore`: a `Bool` to indicate if a field should be skipped/ignored when `applyeach` or `make` is called
   * `name`: a `Symbol` to be used instead of a defined field name in `applyeach` or used to match a field in `make`
-  * `choosetype`: a function to apply to a field when `Structs.make` is called to determine the concrete type of an abstract or Union typed field
+  * `choosetype`: a function to apply to a field when `StructUtils.make` is called to determine the concrete type of an abstract or Union typed field
 
 For example, the following struct definition includes a field with a `dateformat` tag:
 ```julia
@@ -246,10 +246,10 @@ end
 Macro to enhance a `mutable struct` definition by automatically
 generating an empty or "no-argument" constructor. Similar to the
 `@kwdef` macro, default values can be specified for fields, which will
-be set in the generated constructor. `Structs.noarg` trait is also
+be set in the generated constructor. `StructUtils.noarg` trait is also
 overridden to return `true` for the struct type. This allows
 structs to easily participate in programmatic construction via
-`Structs.make`.
+`StructUtils.make`.
 
 Note that `const` fields are currently not allowed in `@noarg` structs.
 
@@ -286,9 +286,9 @@ end
 
 Macro to enhance a `struct` definition by automatically generating a
 keyword argument constructor. Default values can be specified for fields,
-which will be set in the generated constructor. `Structs.kwdef` trait is
+which will be set in the generated constructor. `StructUtils.kwdef` trait is
 also overridden to return `true` for the struct type. This allows structs
-to easily participate in programmatic construction via `Structs.make`.
+to easily participate in programmatic construction via `StructUtils.make`.
 
 $SHARED_MACRO_DOCS
 
@@ -321,7 +321,7 @@ end
 Macro to enhance a `struct` definition by automatically generating an
 outer constructor with default values for trailing fields. The generated
 constructor will accept arguments for non-default fields and pass default
-values to the inner constructor. `Structs.fielddefaults` trait is also
+values to the inner constructor. `StructUtils.fielddefaults` trait is also
 overridden to return a `NamedTuple` of default values for the struct type.
 
 $SHARED_MACRO_DOCS

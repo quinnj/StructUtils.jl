@@ -1,23 +1,23 @@
-module Structs
+module StructUtils
 
 using Dates, UUIDs
 
 export @noarg, @defaults, @tags
 
 """
-    Structs.StructStyle
+    StructUtils.StructStyle
 
 Abstract type that all concrete struct styles must subtype.
 Custom struct styles allow fine-grained control over various
-Structs.jl interface methods like `fieldtags`, `fielddefaults`,
+StructUtils.jl interface methods like `fieldtags`, `fielddefaults`,
 `lift`, `lower`, etc.
 """
 abstract type StructStyle end
 
 """
-    Structs.DefaultStyle
+    StructUtils.DefaultStyle
 
-Default struct style that all Structs.jl interface methods
+Default struct style that all StructUtils.jl interface methods
 are defined for by default.
 """
 struct DefaultStyle <: StructStyle end
@@ -25,11 +25,11 @@ struct DefaultStyle <: StructStyle end
 include("macros.jl")
 
 """
-  Structs.dictlike(::Type{T}) -> Bool
-  Structs.dictlike(::StructStyle, ::Type{T}) -> Bool
+  StructUtils.dictlike(::Type{T}) -> Bool
+  StructUtils.dictlike(::StructStyle, ::Type{T}) -> Bool
 
 Returns `true` if `T` is a dictionary-like type, `false` otherwise.
-When `Structs.make(T, source)` is called, if `dictlike(T)` is `true`,
+When `StructUtils.make(T, source)` is called, if `dictlike(T)` is `true`,
 an instance will be `initialize`d, and then `addkeyval!`ed for each
 key-value pair in `source`.
 """
@@ -42,8 +42,8 @@ dictlike(_, ::Type{T}) where {T} = dictlike(T)
 dictlike(st, ::T) where {T} = dictlike(st, T)
 
 """
-  Structs.noarg(::Type{T}) -> Bool
-  Structs.noarg(::StructStyle, ::Type{T}) -> Bool
+  StructUtils.noarg(::Type{T}) -> Bool
+  StructUtils.noarg(::StructStyle, ::Type{T}) -> Bool
 
 Signals that `T` is a mutable type that can be constructed by calling an empty
 constructor, like `t = T()`. Automatically overloaded when structs use the
@@ -57,15 +57,15 @@ noarg(_, ::Type{T}) where {T} = noarg(T)
 noarg(st, ::T) where {T} = noarg(st, T)
 
 """
-  Structs.kwdef(::Type{T}) -> Bool
-  Structs.kwdef(::StructStyle, ::Type{T}) -> Bool
+  StructUtils.kwdef(::Type{T}) -> Bool
+  StructUtils.kwdef(::StructStyle, ::Type{T}) -> Bool
 
 Signals that `T` can be constructed by passing struct fields as keyword arguments
 to the constructor, like `t = T(field1=a, field2=b, ...)`. Automatically overloaded
 when structs use the `@kwdef` macro in their struct definition. The default value
 is `false` unless explicitly overloaded.
 
-Note that `Structs.@kwdef` currently has no relation to `Base.@kwdef`, yet should
+Note that `StructUtils.@kwdef` currently has no relation to `Base.@kwdef`, yet should
 be a drop-in replacement for it.
 """
 function kwdef end
@@ -75,7 +75,7 @@ kwdef(_, ::Type{T}) where {T} = kwdef(T)
 kwdef(st, ::T) where {T} = kwdef(st, T)
 
 """
-    Structs.fieldtagkey(::Type{<:StructStyle}) -> Symbol
+    StructUtils.fieldtagkey(::Type{<:StructStyle}) -> Symbol
 
 Field tags defined on struct fields can be grouped by keys that are associated with
 a particular struct style. This function returns the key that should be used to
@@ -85,7 +85,7 @@ retrieve field tags for a given struct style. By default, this function returns
 ```julia
 struct MySQLStyle <: StructStyle end
 
-Structs.fieldtagkey(::Type{MySQLStyle}) = :mysql
+StructUtils.fieldtagkey(::Type{MySQLStyle}) = :mysql
 
 @tags struct Foo
     a::Int &(mysql=(name="foo_a",),)
@@ -93,7 +93,7 @@ Structs.fieldtagkey(::Type{MySQLStyle}) = :mysql
 end
 ```
 
-In this example, when `Structs.make` is called on `Foo` with the `MySQLStyle` style,
+In this example, when `StructUtils.make` is called on `Foo` with the `MySQLStyle` style,
 only `(name="foo_a",)` will be retrieved from the field tags for `a` because the
 `mysql` key is associated with the `MySQLStyle` struct style.
 """
@@ -102,13 +102,13 @@ function fieldtagkey end
 fieldtagkey(::Type{T}) where {T} = nothing
 
 """
-    Structs.fieldtags(::Type{T}) -> NamedTuple
-    Structs.fieldtags(::StructStyle, ::Type{T}) -> NamedTuple
-    Structs.fieldtags(::StructStyle, ::Type{T}, fieldname) -> NamedTuple
+    StructUtils.fieldtags(::Type{T}) -> NamedTuple
+    StructUtils.fieldtags(::StructStyle, ::Type{T}) -> NamedTuple
+    StructUtils.fieldtags(::StructStyle, ::Type{T}, fieldname) -> NamedTuple
 
 Returns a `NamedTuple` of field tags for the struct `T`. Field tags can be
 added manually by overloading `fieldtags`, or included via convenient syntax
-using the Structs.jl macros: `@tags`, `@noarg`, `@defaults`, or `@kwdef`.
+using the StructUtils.jl macros: `@tags`, `@noarg`, `@defaults`, or `@kwdef`.
 """
 function fieldtags end
 
@@ -126,13 +126,13 @@ fieldtags(::Type{T}, key) where {T} = get(() -> (;), fieldtags(T), key)
 end
 
 """
-    Structs.fielddefaults(::Type{T}) -> NamedTuple
-    Structs.fielddefaults(::StructStyle, ::Type{T}) -> NamedTuple
-    Structs.fielddefault(::StructStyle, ::Type{T}, fieldname) -> NamedTuple
+    StructUtils.fielddefaults(::Type{T}) -> NamedTuple
+    StructUtils.fielddefaults(::StructStyle, ::Type{T}) -> NamedTuple
+    StructUtils.fielddefault(::StructStyle, ::Type{T}, fieldname) -> NamedTuple
 
 Returns a `NamedTuple` of field defaults for the struct `T`. Field defaults can be
 added manually by overloading `fielddefaults`, or included via convenient syntax
-using the Structs.jl macros: `@tags`, `@noarg`, `@defaults`, or `@kwdef`.
+using the StructUtils.jl macros: `@tags`, `@noarg`, `@defaults`, or `@kwdef`.
 """
 function fielddefaults end
 
@@ -143,12 +143,12 @@ fielddefault(st, ::Type{T}, key) where {T} = haskey(fielddefaults(st, T), key) ?
 @doc (@doc fielddefaults) fielddefault
 
 """
-    Structs.initialize(T) -> T
-    Structs.initialize(T, dims) -> T
-    Structs.initialize(::StructStyle, T) -> T
-    Structs.initialize(::StructStyle, T, dims) -> T
+    StructUtils.initialize(T) -> T
+    StructUtils.initialize(T, dims) -> T
+    StructUtils.initialize(::StructStyle, T) -> T
+    StructUtils.initialize(::StructStyle, T, dims) -> T
 
-In `Structs.make`, this function is called to initialize a new instance of `T`,
+In `StructUtils.make`, this function is called to initialize a new instance of `T`,
 when `T` is `dictlike`, `arraylike`, or `noarg`. For `arraylike`, if the `source`
 in `make` is discovered to have multiple dimensions, `dims` will be passed to
 `initialize`. The default implementation of `initialize` is to call `T()` or `T(undef, dims...)`
@@ -164,10 +164,10 @@ initialize(_, ::Type{T}) where {T} = initialize(T)
 initialize(_, ::Type{T}, dims) where {T} = initialize(T, dims)
 
 """
-    Structs.addkeyval!(d, k, v)
+    StructUtils.addkeyval!(d, k, v)
 
 Add a key-value pair to a dictionary-like object `d`. This function is called
-by `Structs.make` when `d` is `dictlike`. The default implementation is to
+by `StructUtils.make` when `d` is `dictlike`. The default implementation is to
 call `d[k] = v` for `AbstractDict`.
 """
 function addkeyval! end
@@ -181,15 +181,15 @@ _valtype(d) = valtype(d)
 _valtype(::AbstractVector{Pair{A,B}}) where {A,B} = B
 
 """
-  Structs.arraylike(::Type{T}) -> Bool
-  Structs.arraylike(::StructStyle, ::Type{T}) -> Bool
+  StructUtils.arraylike(::Type{T}) -> Bool
+  StructUtils.arraylike(::StructStyle, ::Type{T}) -> Bool
 
 Returns `true` if `T` is an array-like type, `false` otherwise. This function is
-called by `Structs.make` to determine if `T` is array-like. The default
+called by `StructUtils.make` to determine if `T` is array-like. The default
 implementation returns `true` for `<:AbstractArray`, `<:AbstractSet`, `<:Tuple`,
 `<:Base.Generator`, and `<:Core.SimpleVector` types, and `false` for `<:AbstractArray{T,0}`.
 
-Once `initialize` is called, `Structs.make` will call `push!` to add values
+Once `initialize` is called, `StructUtils.make` will call `push!` to add values
 to the array-like object.
 """
 function arraylike end
@@ -202,17 +202,17 @@ arraylike(::Type{<:Union{AbstractArray,AbstractSet,Tuple,Base.Generator,Core.Sim
 arraylike(::Type{<:AbstractArray{T,0}}) where {T} = false
 
 """
-  Structs.structlike(::Type{T}) -> Bool
-  Structs.structlike(::StructStyle, ::Type{T}) -> Bool
+  StructUtils.structlike(::Type{T}) -> Bool
+  StructUtils.structlike(::StructStyle, ::Type{T}) -> Bool
 
 Returns `true` if `T` is a struct-like type, `false` otherwise. This function is
-called by `Structs.make` to determine if `T` is struct-like. The default
+called by `StructUtils.make` to determine if `T` is struct-like. The default
 implementation returns `true` for `isstructtype(T)` and `!Base.issingletontype(T)`.
 
 `structlike` structs are expected to be able to be constructed by the default constructor
 like `T(field1, field2, ...)`.
 
-Due to how `Structs.make` works, `structlike` is often overloaded to `false` by "unit" types
+Due to how `StructUtils.make` works, `structlike` is often overloaded to `false` by "unit" types
 where fields should be considered private the `make` process should instead attempt to
 `lift` the `source` object into the `unit` type.
 """
@@ -237,8 +237,8 @@ structlike(::Module) = false
 structlike(::Function) = false
 
 """
-  Structs.nulllike(T) -> Bool
-  Structs.nulllike(::StructStyle, T) -> Bool
+  StructUtils.nulllike(T) -> Bool
+  StructUtils.nulllike(::StructStyle, T) -> Bool
 
 Returns `true` if `T` is a null-like type, `false` otherwise. This function is
 mainly used in the default `choosetype` implementation to determine if a
@@ -254,11 +254,11 @@ nulllike(::Type{Nothing}) = true
 nulllike(::Type{Missing}) = true
 
 """
-  Structs.lower(x) -> x
-  Structs.lower(::StructStyle, x) -> x
+  StructUtils.lower(x) -> x
+  StructUtils.lower(::StructStyle, x) -> x
 
 Domain value transformation function. This function is called by
-`Structs.applyeach` on each value in the `source` object before
+`StructUtils.applyeach` on each value in the `source` object before
 calling the apply function. By default, `lower` is the identity function.
 This allows a domain transformation of values according to the
 style used.
@@ -279,10 +279,10 @@ function lower(st::StructStyle, x, tags)
 end
 
 """
-  Structs.lift(::Type{T}, x) -> T
-  Structs.lift(::StructStyle, ::Type{T}, x) -> T
+  StructUtils.lift(::Type{T}, x) -> T
+  StructUtils.lift(::StructStyle, ::Type{T}, x) -> T
 
-Lifts a value `x` to a type `T`. This function is called by `Structs.make`
+Lifts a value `x` to a type `T`. This function is called by `StructUtils.make`
 to lift values to the appropriate type. The default implementation is
 the identity function for most types, but it also includes special cases
 for `Symbol`, `Char`, `UUID`, `VersionNumber`, `Regex`, and `TimeType` types.
@@ -331,13 +331,13 @@ end
 @inline lift(f::F, st::StructStyle, ::Type{T}, x, tags) where {F,T} = f(lift(st, T, x, tags))
 
 """
-    Structs.choosetype(::Type{T}, x) -> T
-    Structs.choosetype(::StructStyle, ::Type{T}, x) -> T
+    StructUtils.choosetype(::Type{T}, x) -> T
+    StructUtils.choosetype(::StructStyle, ::Type{T}, x) -> T
 
 Chooses a concrete type from an abstract or union type `T` based on the value `x`, where
-`x` is the "source" object in the context of `Structs.make`.
+`x` is the "source" object in the context of `StructUtils.make`.
 This allows a runtime decision to be made around a concrete subtype
-that should be used for `Structs.make` based on potentially dynamic values
+that should be used for `StructUtils.make` based on potentially dynamic values
 of the source object.
 """
 function choosetype end
@@ -360,14 +360,14 @@ end
 @inline choosetype(f, style::StructStyle, ::Type{T}, x, tags) where {T} = f(style, choosetype(style, T, x, tags), x, tags)
 
 """
-    Structs.applyeach(style, f, x) -> Union{Structs.EarlyReturn, Nothing}
+    StructUtils.applyeach(style, f, x) -> Union{StructUtils.EarlyReturn, Nothing}
 
 A custom `foreach`-like function that operates specifically on `(key, val)` or `(ind, val)` pairs,
-and supports short-circuiting (via `Structs.EarlyReturn`). It also supports a `StructStyle` argument
+and supports short-circuiting (via `StructUtils.EarlyReturn`). It also supports a `StructStyle` argument
 to allow for style-specific behavior for non-owned types.
 
 For each key-value or index-value pair in `x`, call `f(k, v)`.
-If `f` returns a `Structs.EarlyReturn` instance, `applyeach` should
+If `f` returns a `StructUtils.EarlyReturn` instance, `applyeach` should
 return the `EarlyReturn` immediately and stop iterating (i.e. short-circuit).
 Otherwise, the return value of `f` is ignored and iteration continues.
 
@@ -376,11 +376,11 @@ Key types are generally expected to be Symbols, Strings, or Integers.
 An example overload of `applyeach` for a generic iterable would be:
 
 ```julia
-function Structs.applyeach(style::Structs.StructStyle, f, x::MyIterable)
+function StructUtils.applyeach(style::StructUtils.StructStyle, f, x::MyIterable)
     for (i, v) in enumerate(x)
-        ret = f(i, Structs.lower(style, v))
+        ret = f(i, StructUtils.lower(style, v))
         # if `f` returns EarlyReturn, return immediately
-        ret isa Structs.EarlyReturn && return ret
+        ret isa StructUtils.EarlyReturn && return ret
     end
     return
 end
@@ -389,14 +389,14 @@ end
 Note that `applyeach` must include the `style` argument when overloading,
 even though it can be _called_ with out it, where the `DefaultStyle` will be used.
 
-Also note that before applying `f`, the value `v` is passed through `Structs.lower(style, v)`.
+Also note that before applying `f`, the value `v` is passed through `StructUtils.lower(style, v)`.
 
 If a value is `#undef` or otherwise not defined, the `f` function should be called with `nothing`.
 """
 function applyeach end
 
 """
-    Structs.EarlyReturn{T}
+    StructUtils.EarlyReturn{T}
 
 A wrapper type that can be used in function arguments to `applyeach`
 to short-circuit iteration and return a value from `applyeach`.
@@ -406,9 +406,9 @@ Example usage:
 ```julia
 function find_needle_in_haystack(haystack, needle)
     ret = applyeach(haystack) do k, v
-        k == needle && return Structs.EarlyReturn(v)
+        k == needle && return StructUtils.EarlyReturn(v)
     end
-    ret isa Structs.EarlyReturn && return ret.value
+    ret isa StructUtils.EarlyReturn && return ret.value
     throw(ArgumentError("needle not found in haystack")
 end
 ````
@@ -745,7 +745,7 @@ function applylength(x)
     ref = Ref(0)
     lc = LengthClosure(Base.unsafe_convert(Ptr{Int}, ref))
     GC.@preserve ref begin
-        Structs.applyeach(lc, x)
+        StructUtils.applyeach(lc, x)
         return unsafe_load(lc.len)
     end
 end
@@ -794,10 +794,10 @@ end
 @inline (f::MultiDimValFunc{S,A})(x) where {S,A} = setindex!(f.arr, x, f.dims...)
 
 """
-    Structs.make(T, source) -> T
-    Structs.make(style, T, source) -> T
-    Structs.make(f, style, T, source) -> nothing
-    Structs.make!(style, x::T, source)
+    StructUtils.make(T, source) -> T
+    StructUtils.make(style, T, source) -> T
+    StructUtils.make(f, style, T, source) -> nothing
+    StructUtils.make!(style, x::T, source)
 
 Construct a struct of type `T` from `source` using the given `style`. The `source` can be any
 type of object, and the `style` can be any `StructStyle` subtype.

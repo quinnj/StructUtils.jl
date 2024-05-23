@@ -1,4 +1,4 @@
-Structs.jl is licensed under the MIT License:
+StructUtils.jl is licensed under the MIT License:
 
 Copyright (c) 2024: Jacob Quinn
 
