@@ -533,7 +533,7 @@ end
         return unsafe_load(Ptr{UInt32}(atomicfields), 1 + s÷32) & (1 << (s%32)) != 0
     end
 else
-    const _isfieldatomic = isfieldatomic
+    const _isfieldatomic = Base.isfieldatomic
 end
 (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, _isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
 
