@@ -203,7 +203,11 @@ end
     ft = StructUtils.fieldtags(NoArg2)
     @test ft.with_tag == (xml=(key="with-tag",),) && ft.with_tag_type == (xml=(key="with-tag-type",),) && ft.with_tag_default == (xml=(key="with-tag-default",),) && ft.with_tag_type_default == (xml=(key="with-tag-default",),) && ft.with_tag_atomic == (xml=(key="with-tag-atomic",),) && ft.with_tag_type_atomic == (xml=(key="with-tag-type-atomic",),) && ft.with_tag_default_atomic == (xml=(key="with-tag-default-atomic",),) && ft.with_tag_type_default_atomic == (xml=(key="with-tag-default-atomic",),)
 
-    @test string(@doc(NoArg4)) == "Documentation for NoArg4\n"
+    @static if VERSION >= v"1.11-DEV"
+        @test @doc(NoArg4).text[1] == "Documentation for NoArg4\n"
+    else
+        @test string(@doc(NoArg4)) == "Documentation for NoArg4\n"
+    end
 
     @test_throws ArgumentError @macroexpand StructUtils.@noarg struct NonMutableNoArg
         with_type::Int = 1
