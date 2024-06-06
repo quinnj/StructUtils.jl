@@ -520,7 +520,11 @@ struct NoArgFieldRef{T}
     i::Int
 end
 
-(f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, Base.isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
+@static if VERSION < v"1.10"
+    (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val)
+else
+    (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, Base.isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
+end
 
 mutable struct FieldRef{T}
     set::Bool
