@@ -521,10 +521,21 @@ struct NoArgFieldRef{T}
 end
 
 @static if VERSION < v"1.10"
-    (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val)
+    function _isfieldatomic(@nospecialize(t::Type), s::Int)
+        t = Base.unwrap_unionall(t)
+        # TODO: what to do for `Union`?
+        isa(t, DataType) || return false # uncertain
+        ismutabletype(t) || return false # immutable structs are never atomic
+        1 <= s <= length(t.name.names) || return false # OOB reads are not atomic (they always throw)
+        atomicfields = t.name.atomicfields
+        atomicfields === C_NULL && return false
+        s -= 1
+        return unsafe_load(Ptr{UInt32}(atomicfields), 1 + s÷32) & (1 << (s%32)) != 0
+    end
 else
-    (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, Base.isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
+    const _isfieldatomic = isfieldatomic
 end
+(f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, _isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
 
 mutable struct FieldRef{T}
     set::Bool
