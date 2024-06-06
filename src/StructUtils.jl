@@ -2,7 +2,7 @@ module StructUtils
 
 using Dates, UUIDs
 
-export @noarg, @defaults, @tags
+export @noarg, @defaults, @tags, Selectors
 
 """
     StructUtils.StructStyle
@@ -114,15 +114,13 @@ function fieldtags end
 
 fieldtags(::Type{T}) where {T} = (;)
 fieldtags(_, ::Type{T}) where {T} = fieldtags(T)
-fieldtags(::Type{T}, key) where {T} = get(() -> (;), fieldtags(T), key)
+fieldtags(::Type{T}, field) where {T} = get(() -> (;), fieldtags(T), field)
 
-@inline function fieldtags(st::StructStyle, ::Type{T}, key) where {T}
+function fieldtags(st::StructStyle, ::Type{T}, field) where {T}
     ft = fieldtags(st, T)
-    fft = get(() -> (;), ft, key)
-    isempty(fft) && return fft
+    fft = get(() -> (;), ft, field)
     ftk = fieldtagkey(typeof(st))
-    ftk === nothing && return fft
-    return get(() -> (;), fft, ftk)
+    return ftk === nothing ? fft : get(() -> (;), fft, ftk)
 end
 
 """
@@ -525,16 +523,19 @@ end
 (f::NoArgFieldRef{T})(val::S) where {T,S} = setfield!(f.val, f.i, val, Base.isfieldatomic(T, f.i) ? :sequentially_consistent : :not_atomic)
 
 mutable struct FieldRef{T}
+    set::Bool
     val::T
-    FieldRef{T}() where {T} = new{T}()
-    FieldRef{T}(x) where {T} = new{T}(x)
+    FieldRef{T}() where {T} = new{T}(false)
+    FieldRef{T}(x) where {T} = new{T}(true, x)
 end
 
-(f::FieldRef{T})(val) where {T} = setfield!(f, :val, val)
-Base.getindex(f::FieldRef) = f.val
+(f::FieldRef{T})(val) where {T} = (f.set = true; f.val = val)
+Base.getindex(f::FieldRef) = f.set ? f.val : nothing
 
 keyeq(a, b::String) = string(a) == b
 keyeq(a::AbstractString, b::String) = String(a) == b
+keyeq(a, b) = isequal(a, b)
+keyeq(x) = y -> keyeq(x, y)
 
 function (f::KeyValStructClosure{T,S,V})(key::K, val::VV) where {T,S,V,K,VV}
     if @generated
@@ -904,5 +905,7 @@ end
 make!(style::StructStyle, ::Type{T}, source) where {T} = make!(style, initialize(style, T), source)
 
 @doc (@doc make) make!
+
+include("selectors.jl")
 
 end
