@@ -178,6 +178,39 @@ function _getindex(x, ::typeof(~), key::Union{KeyInd, Colon})
     return values
 end
 
+# _get, like Base.get for objects
+function _get(x, key::Union{KeyInd, Integer}, default)
+    if StructUtils.arraylike(x) && key isa KeyInd
+        # indexing an array with a key, so we check
+        # each element if it's an object and if the
+        # object has the key
+        # like a broadcasted getindex over x
+        values = List()
+        StructUtils.applyeach(x) do _, item
+            if StructUtils.structlike(item)
+                # if array elements are objects, we do a broadcasted getproperty with `key`
+                # should we try-catch and ignore KeyErrors?
+                push!(values, _getindex(item, key))
+            else
+                # non-objects are just ignored
+            end
+            return
+        end
+        return values
+    elseif StructUtils.structlike(x) || StructUtils.arraylike(x)
+        # indexing object w/ key or array w/ index
+        # returns a single value
+        ret = StructUtils.applyeach(x) do k, v
+            StructUtils.keyeq(k, key) && return StructUtils.EarlyReturn(v)
+            return
+        end
+        ret isa StructUtils.EarlyReturn || return default
+        return ret.value
+    else
+        noselection(x)
+    end
+end
+
 selectioncheck(x) = StructUtils.structlike(x) || StructUtils.arraylike(x) || noselection(x)
 @noinline noselection(x) = throw(ArgumentError("Selection syntax not defined for this object of type: `$(typeof(x))`"))
 
@@ -202,6 +235,7 @@ macro selectors(T)
         Base.getindex(x::$T, ::Colon, arg) = StructUtils.Selectors._getindex(x, :, arg)
         Base.getindex(x::$T, ::typeof(~), arg) = StructUtils.Selectors._getindex(x, ~, arg)
         Base.getindex(x::$T, ::typeof(~), key, val) = StructUtils.Selectors._getindex(x, ~, key, val)
+        Base.get(x::$T, key::Symbol, def) = StructUtils.Selectors._get(x, key, def)
         Base.getproperty(x::$T, key::Symbol) = StructUtils.Selectors._getindex(x, key)
         Base.propertynames(x::$T) = StructUtils.Selectors._propertynames(x)
         Base.hasproperty(x::$T, key::Symbol) = key in propertynames(x)
