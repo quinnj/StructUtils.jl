@@ -852,7 +852,7 @@ struct MakeClosure{F}
     f::F
 end
 
-@inline (f::MakeClosure)(style::S, ::Type{T}, source::V, tags) where {S,T,V} = _make(f.f, style, T, source, tags)
+@inline (f::MakeClosure)(style::S, ::Type{T}, source::V, tags) where {S,T,V} = applymake(f.f, style, T, source, tags)
 
 @inline function make(style::StructStyle, ::Type{T}, source, tags=(;)) where {T}
     vc = ValueClosure{T}()
@@ -867,7 +867,7 @@ end
 # assume choosetype has been applied to T
 # f is function to be applied to made value
 # returns state from applyeach if any
-function _make(f::F, style::StructStyle, ::Type{T}, source, tags=(;)) where {F,T}
+function applymake(f::F, style::StructStyle, ::Type{T}, source, tags=(;)) where {F,T}
     if dictlike(style, T)
         x = initialize(style, T)
         st = applyeach(style, DictClosure(style, x), source)
