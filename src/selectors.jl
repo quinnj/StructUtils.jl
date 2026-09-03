@@ -32,7 +32,6 @@ items(x::List) = getfield(x, :items)
 Base.getindex(x::List) = map(getindex, items(x))
 List(T=Any) = List(T[])
 Base.size(x::List) = size(items(x))
-Base.eltype(::List{T}) where {T} = T
 Base.isassigned(x::List, args::Integer...) = isassigned(items(x), args...)
 
 Base.push!(x::List, item) = push!(items(x), item)
