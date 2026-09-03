@@ -633,4 +633,5 @@ end
 
 end
 
+include(joinpath(dirname(pathof(StructUtils)), "../test/lazily_initialized_fields.jl"))
 include("trim_compile_tests.jl")
